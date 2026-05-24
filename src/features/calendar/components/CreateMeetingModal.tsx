@@ -10,8 +10,10 @@ import {colors} from '@shared/theme/colors';
 import {radius} from '@shared/theme/radius';
 import {spacing} from '@shared/theme/spacing';
 import {formatPrettyDate} from '@shared/utils/date';
+import {useAuthStore} from '@store/auth/auth.store';
 import {useCreateMeetingForm} from '../hooks/useCreateMeetingForm';
 import type {Meeting} from '@app-types/meeting';
+import {ParticipantAssignmentsField} from './ParticipantAssignmentsField';
 
 type Props = {
   visible: boolean;
@@ -46,6 +48,7 @@ export const CreateMeetingModal = memo(({visible, dateISO, editing, onClose}: Pr
 type TimeFieldKey = 'startTime' | 'endTime';
 
 const FormBody = memo(({dateISO, editing, onClose}: FormBodyProps) => {
+  const organizerUid = editing?.ownerId ?? useAuthStore(s => s.user?.uid);
   const {form, submit} = useCreateMeetingForm({
     dateISO,
     editing,
@@ -146,6 +149,8 @@ const FormBody = memo(({dateISO, editing, onClose}: FormBodyProps) => {
           />
         )}
       />
+
+      <ParticipantAssignmentsField control={control} excludeUid={organizerUid ?? null} />
 
       <Button
         label={editing ? 'Save changes' : 'Create meeting'}

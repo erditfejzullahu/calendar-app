@@ -6,17 +6,22 @@ import {useAuthStore} from '@store/auth/auth.store';
 import {bindMeetingsToUser, useMeetingsStore} from '@store/meetings/meetings.store';
 import {useMeetingsForDay} from '@store/meetings/meetings.selectors';
 import {buildMeetingSchema} from '../schemas/meeting.schema';
+import {meetingInvolvesUid} from '@shared/utils/meeting-membership';
 import {useCreateMeetingForm} from './useCreateMeetingForm';
 
 jest.mock('@services/firebase/meetings.service', () => ({
   meetingsService: {
     subscribeAll: jest.fn(() => jest.fn()),
     subscribeMeetingsAcrossAllUsers: jest.fn(() => jest.fn()),
+    subscribeMeetingsWhereUserIsParticipant: jest.fn(() => jest.fn()),
+    subscribeOwnMeetingsMergedWithParticipantInvites: jest.fn(() => jest.fn()),
+    subscribeUsersDirectory: jest.fn(() => jest.fn()),
     subscribeUserDocument: jest.fn(() => jest.fn()),
     create: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
     fetchMeetingFromServer: jest.fn(),
+    fetchMeetingUserDisplayBundle: jest.fn(async () => ({ownerHints: {}, userPeekByUid: {}})),
     fetchOwnerDisplayHints: jest.fn(),
     ensureUserDoc: jest.fn(async () => undefined),
   },
@@ -30,7 +35,7 @@ describe('useCreateMeetingForm', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     bindMeetingsToUser(null);
-    mockedMeetings.subscribeAll.mockReturnValue(() => {});
+    mockedMeetings.subscribeOwnMeetingsMergedWithParticipantInvites.mockReturnValue(() => {});
     mockedMeetings.subscribeMeetingsAcrossAllUsers.mockReturnValue(() => {});
     mockedMeetings.subscribeUserDocument.mockReturnValue(() => {});
     useAuthStore.setState({
@@ -68,6 +73,7 @@ describe('useCreateMeetingForm', () => {
         dateISO,
         startTime: '16:00',
         endTime: '17:15',
+        participantIds: [],
       });
     });
 
@@ -144,10 +150,13 @@ describe('useCreateMeetingForm', () => {
       dateISO,
       startTime: '10:30',
       endTime: '11:30',
-    } as const;
+      participantIds: [] as string[],
+    };
 
     const blocked = buildMeetingSchema(
-      dayBundle.current.calendarDay.filter(meeting => meeting.ownerId === dayBundle.current.uid),
+      dayBundle.current.calendarDay.filter(m =>
+        meetingInvolvesUid(m, dayBundle.current.uid ?? undefined),
+      ),
     ).safeParse(conflictingValues);
 
     expect(blocked.success).toBe(false);

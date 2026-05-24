@@ -23,6 +23,7 @@ const baseShape = {
   dateISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date'),
   startTime: timeField,
   endTime: timeField,
+  participantIds: z.array(z.string().min(1)).max(50),
 };
 
 /**

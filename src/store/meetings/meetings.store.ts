@@ -52,19 +52,29 @@ let lastMeetingWireSig = '';
 /** Drop stale snaps that resurrect a deleted row (common with collection-group cache). */
 const suppressedDeleteMeetingKeys = new Set<string>();
 
-const prefetchOwnerHints = async (meetings: Meeting[]): Promise<void> => {
-  const {ownerHints, userRole, adminCalendarShowAllGlobal} = useMeetingsStore.getState();
-  if (!(userRole === 'admin' && adminCalendarShowAllGlobal && meetings.length > 0)) {
-    return;
+const prefetchUserDisplayHints = async (meetings: Meeting[]): Promise<void> => {
+  if (meetings.length === 0) return;
+
+  const {ownerHints, userPeekByUid} = useMeetingsStore.getState();
+
+  const uidsNeedingLabels = new Set<string>();
+  for (const m of meetings) {
+    uidsNeedingLabels.add(m.ownerId);
+    for (const p of m.participantIds ?? []) {
+      if (p) uidsNeedingLabels.add(p);
+    }
   }
 
-  const missing = [...new Set(meetings.map(m => m.ownerId))].filter(uid => !(uid in ownerHints));
+  const missing = [...uidsNeedingLabels].filter(
+    uid => !(uid in ownerHints) || !(uid in userPeekByUid),
+  );
   if (missing.length === 0) return;
 
   try {
-    const next = await meetingsService.fetchOwnerDisplayHints(missing);
+    const bundle = await meetingsService.fetchMeetingUserDisplayBundle(missing);
     useMeetingsStore.setState(s => ({
-      ownerHints: {...s.ownerHints, ...next},
+      ownerHints: {...s.ownerHints, ...bundle.ownerHints},
+      userPeekByUid: {...s.userPeekByUid, ...bundle.userPeekByUid},
     }));
   } catch {
     /* labels are purely cosmetic */
@@ -92,21 +102,23 @@ const wireMeetingsListener = (): void => {
   lastMeetingWireSig = sig;
 
   if (!globalScope) {
-    useMeetingsStore.setState({ownerHints: {}});
+    useMeetingsStore.setState({ownerHints: {}, userPeekByUid: {}});
   }
 
   internal._setLoading(true);
 
   const onMeetings = (meetings: Meeting[]) => {
     internal._hydrateMeetings(meetings);
-    void prefetchOwnerHints(meetings);
+    void prefetchUserDisplayHints(meetings);
   };
 
   unsubMeetings = globalScope
     ? meetingsService.subscribeMeetingsAcrossAllUsers(onMeetings, err =>
         internal._setError(err.message),
       )
-    : meetingsService.subscribeAll(uid, onMeetings, err => internal._setError(err.message));
+    : meetingsService.subscribeOwnMeetingsMergedWithParticipantInvites(uid, onMeetings, err =>
+        internal._setError(err.message),
+      );
 };
 
 export const useMeetingsStore = create<MeetingsStore>()((set, get) => ({
@@ -148,6 +160,10 @@ export const useMeetingsStore = create<MeetingsStore>()((set, get) => ({
       set({adminCalendarShowAllGlobal: safe});
       queueMicrotask(() => wireMeetingsListener());
     },
+
+    prefetchUserProfilesForMeetings: meetings => {
+      void prefetchUserDisplayHints(meetings);
+    },
   },
 
   internal: {
@@ -171,7 +187,12 @@ export const useMeetingsStore = create<MeetingsStore>()((set, get) => ({
           return !prev || m.updatedAt >= prev.updatedAt ? m : prev;
         });
 
-        return {...buildIndexes(merged), loading: false, error: null};
+        return {
+          ...buildIndexes(merged),
+          loading: false,
+          error: null,
+          meetingsInitialHydrated: true,
+        };
       });
     },
     _mergeMeetingIntoIndex: meeting => {
@@ -181,8 +202,14 @@ export const useMeetingsStore = create<MeetingsStore>()((set, get) => ({
           m => meetingCompositeKey(m) !== key,
         );
         list.push(meeting);
-        return {...buildIndexes(list), loading: state.loading, error: state.error};
+        return {
+          ...buildIndexes(list),
+          loading: state.loading,
+          error: state.error,
+          meetingsInitialHydrated: true,
+        };
       });
+      void prefetchUserDisplayHints([meeting]);
     },
     _removeMeetingFromIndex: target => {
       set(state => {
@@ -198,13 +225,14 @@ export const useMeetingsStore = create<MeetingsStore>()((set, get) => ({
         stats: extras.stats,
         userRole: extras.userRole,
         ...(extras.userRole !== 'admin'
-          ? {adminCalendarShowAllGlobal: false, ownerHints: {}}
+          ? {adminCalendarShowAllGlobal: false, ownerHints: {}, userPeekByUid: {}}
           : {}),
       });
       queueMicrotask(() => wireMeetingsListener());
     },
     _setLoading: loading => set({loading}),
-    _setError: error => set({error, loading: false}),
+    _setError: error =>
+      set({error, loading: false, meetingsInitialHydrated: true}),
     _reset: () => {
       suppressedDeleteMeetingKeys.clear();
       set({...initialMeetingsSlice});
@@ -233,6 +261,7 @@ export const bindMeetingsToUser = (uid: string | null): void => {
   suppressedDeleteMeetingKeys.clear();
 
   internal._setLoading(true);
+  useMeetingsStore.setState({meetingsInitialHydrated: false});
   unsubStats = meetingsService.subscribeUserDocument(uid, internal._hydrateUserExtras, () => {
     /* stats are non-critical */
   });

@@ -3,6 +3,7 @@ import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {buildMeetingSchema, MeetingFormValues} from '../schemas/meeting.schema';
 import type {Meeting, MeetingDraft} from '@app-types/meeting';
+import {meetingInvolvesUid} from '@shared/utils/meeting-membership';
 import {useMeetingsForDay} from '@store/meetings/meetings.selectors';
 import {useMeetingsActions} from '@store/meetings/meetings.selectors';
 import {useAuthStore} from '@store/auth/auth.store';
@@ -25,9 +26,9 @@ export const useCreateMeetingForm = ({dateISO, editing, onSuccess}: Params) => {
   const selfUid = useAuthStore(s => s.user?.uid);
   const allForDay = useMeetingsForDay(dateISO);
 
-  /** Overlap applies only vs the signed-in organizer’s bookings (not vs other users when admin scopes “all”). */
+  /** Overlap applies vs anything you organize or participate in so we never double-book the viewer. */
   const meetingsForDay = useMemo(
-    () => (selfUid ? allForDay.filter(m => m.ownerId === selfUid) : []),
+    () => (selfUid ? allForDay.filter(m => meetingInvolvesUid(m, selfUid)) : []),
     [allForDay, selfUid],
   );
 
@@ -49,6 +50,7 @@ export const useCreateMeetingForm = ({dateISO, editing, onSuccess}: Params) => {
       dateISO,
       startTime: editing?.startTime ?? start,
       endTime: editing?.endTime ?? end,
+      participantIds: [...(editing?.participantIds ?? [])],
     },
   });
 
@@ -59,6 +61,7 @@ export const useCreateMeetingForm = ({dateISO, editing, onSuccess}: Params) => {
       dateISO: values.dateISO,
       startTime: values.startTime,
       endTime: values.endTime,
+      participantIds: values.participantIds ?? [],
     };
 
     if (editing) {

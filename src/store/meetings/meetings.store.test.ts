@@ -9,11 +9,15 @@ jest.mock('@services/firebase/meetings.service', () => ({
   meetingsService: {
     subscribeAll: jest.fn(() => jest.fn()),
     subscribeMeetingsAcrossAllUsers: jest.fn(() => jest.fn()),
+    subscribeMeetingsWhereUserIsParticipant: jest.fn(() => jest.fn()),
+    subscribeOwnMeetingsMergedWithParticipantInvites: jest.fn(() => jest.fn()),
+    subscribeUsersDirectory: jest.fn(() => jest.fn()),
     subscribeUserDocument: jest.fn(() => jest.fn()),
     create: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
     fetchMeetingFromServer: jest.fn(),
+    fetchMeetingUserDisplayBundle: jest.fn(async () => ({ownerHints: {}, userPeekByUid: {}})),
     fetchOwnerDisplayHints: jest.fn(),
     ensureUserDoc: jest.fn(async () => undefined),
   },
@@ -25,7 +29,7 @@ describe('meetings.store actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     bindMeetingsToUser(null);
-    mockedMeetings.subscribeAll.mockReturnValue(() => {});
+    mockedMeetings.subscribeOwnMeetingsMergedWithParticipantInvites.mockReturnValue(() => {});
     mockedMeetings.subscribeMeetingsAcrossAllUsers.mockReturnValue(() => {});
     mockedMeetings.subscribeUserDocument.mockReturnValue(() => {});
     useAuthStore.setState({

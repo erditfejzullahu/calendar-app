@@ -4,6 +4,13 @@ export type AuthUser = {
   displayName: string | null;
 };
 
+/** Rows from Firestore `/users/{uid}` for invite pickers — keep in sync with `ensureUserDoc` fields. */
+export type AssignableDirectoryUser = {
+  uid: string;
+  email: string;
+  displayName: string;
+};
+
 /** Stored on Firestore user doc (`users/{uid}.role`). */
 export type UserRole = 'client' | 'admin';
 

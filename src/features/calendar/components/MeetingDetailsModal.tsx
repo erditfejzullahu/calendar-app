@@ -23,19 +23,32 @@ const shortUid = (uid: string) => (uid.length <= 10 ? uid : `${uid.slice(0, 8)}�
 
 export const MeetingDetailsModal = memo(({meeting, onClose}: Props) => {
   const {deleteMeeting} = useMeetingsActions();
+  const prefetchUserProfilesForMeetings = useMeetingsStore(s => s.actions.prefetchUserProfilesForMeetings);
   const userRole = useUserRole();
   const selfUid = useAuthStore(s => s.user?.uid);
   const ownerHints = useMeetingsStore(s => s.ownerHints);
+  const userPeekByUid = useMeetingsStore(s => s.userPeekByUid);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     if (!meeting) setEditing(false);
   }, [meeting]);
 
+  useEffect(() => {
+    if (!meeting) return;
+    prefetchUserProfilesForMeetings([meeting]);
+  }, [meeting, prefetchUserProfilesForMeetings]);
+
   const detailSheetOpen = Boolean(meeting) && !editing;
 
   const isOwner = Boolean(meeting && selfUid && meeting.ownerId === selfUid);
   const canMutate = isOwner || userRole === 'admin';
+  const participateAsInviteeOnly = Boolean(
+    meeting &&
+      selfUid &&
+      meeting.ownerId !== selfUid &&
+      meeting.participantIds.includes(selfUid),
+  );
 
   const organizerLabel =
     meeting && !isOwner
@@ -81,6 +94,65 @@ export const MeetingDetailsModal = memo(({meeting, onClose}: Props) => {
               </AppText>
             </View>
 
+            {participateAsInviteeOnly ? (
+              <View style={styles.guestBadge}>
+                <AppText variant="caption" color={colors.primary}>
+                  You're on the guest list
+                </AppText>
+              </View>
+            ) : null}
+
+            {meeting && meeting.participantIds.length > 0 ? (
+              <View style={styles.attendees}>
+                <AppText variant="caption" color={colors.textMuted}>
+                  PARTICIPANTS ({meeting.participantIds.length})
+                </AppText>
+                <View style={styles.attendeeList}>
+                  {meeting.participantIds.map(uid => {
+                    const peekLoaded = uid in userPeekByUid;
+                    const peek = userPeekByUid[uid];
+
+                    if (!peekLoaded) {
+                      return (
+                        <View key={uid} style={styles.attendeeRow}>
+                          <AppText variant="caption" color={colors.textMuted}>
+                            Loading profile…
+                          </AppText>
+                        </View>
+                      );
+                    }
+
+                    const name = peek.displayName.trim();
+                    const email = peek.email.trim();
+                    const hintLine = ownerHints[uid]?.trim() ?? '';
+
+                    if (name && email) {
+                      return (
+                        <View key={uid} style={styles.attendeeRow}>
+                          <AppText variant="bodyStrong" numberOfLines={1}>
+                            {name}
+                          </AppText>
+                          <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
+                            {email}
+                          </AppText>
+                        </View>
+                      );
+                    }
+
+                    const singleLine = name || email || hintLine || 'Attendee profile unavailable';
+
+                    return (
+                      <View key={uid} style={styles.attendeeRow}>
+                        <AppText variant="bodyStrong" numberOfLines={1}>
+                          {singleLine}
+                        </AppText>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             {organizerLabel ? (
               <View style={styles.orgBlock}>
                 <AppText variant="caption" color={colors.textMuted}>
@@ -115,6 +187,10 @@ export const MeetingDetailsModal = memo(({meeting, onClose}: Props) => {
                   <Button label="Delete" variant="danger" onPress={confirmDelete} />
                 </View>
               </>
+            ) : participateAsInviteeOnly ? (
+              <AppText variant="caption" color={colors.textMuted} style={styles.viewOnlyNotice}>
+                You were invited — the organizer updates this meeting if anything changes.
+              </AppText>
             ) : (
               <AppText variant="caption" color={colors.textMuted} style={styles.viewOnlyNotice}>
                 You can open this organizer’s booking, but only they can edit or delete it from this account.
@@ -157,4 +233,15 @@ const styles = StyleSheet.create({
   adminHint: {marginBottom: spacing.md, lineHeight: 18},
   actions: {flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm},
   viewOnlyNotice: {marginTop: spacing.md, lineHeight: 18},
+  guestBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    marginBottom: spacing.md,
+  },
+  attendees: {gap: spacing.xs, marginBottom: spacing.md},
+  attendeeList: {gap: spacing.sm},
+  attendeeRow: {gap: spacing.xxs},
 });

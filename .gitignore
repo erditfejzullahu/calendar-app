@@ -4,6 +4,9 @@ dist/
 build/
 .DS_Store
 
+.ninja_log
+.cxx/
+*_log
 # Native
 # ios/Pods/
 # ios/build/

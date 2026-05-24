@@ -1,6 +1,6 @@
 import {useMemo} from 'react';
 import {useAuthUser} from '@store/auth/auth.selectors';
-import {useMeetingStats, useUpcomingMeetings} from '@store/meetings/meetings.selectors';
+import {useAllUpcomingMeetings, useMeetingStats} from '@store/meetings/meetings.selectors';
 
 /**
  * Single hook that the profile screen consumes — bundles the user, stats
@@ -10,6 +10,9 @@ import {useMeetingStats, useUpcomingMeetings} from '@store/meetings/meetings.sel
 export const useProfileViewModel = () => {
   const user = useAuthUser();
   const stats = useMeetingStats();
-  const upcoming = useUpcomingMeetings(5);
-  return useMemo(() => ({user, stats, upcoming}), [user, stats, upcoming]);
+  const upcomingMeetingsAll = useAllUpcomingMeetings();
+  return useMemo(
+    () => ({user, stats, upcomingMeetingsAll}),
+    [user, stats, upcomingMeetingsAll],
+  );
 };

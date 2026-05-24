@@ -6,6 +6,10 @@
 export type Meeting = {
   id: string;
   ownerId: string;
+  /**
+   * Other attendees (Firestore `participantIds`). Organizer is implicit and not stored here.
+   */
+  participantIds: string[];
   title: string;
   description: string | null;
   dateISO: string;       // YYYY-MM-DD
@@ -19,5 +23,5 @@ export type Meeting = {
 
 export type MeetingDraft = Pick<
   Meeting,
-  'title' | 'description' | 'dateISO' | 'startTime' | 'endTime'
+  'title' | 'description' | 'dateISO' | 'startTime' | 'endTime' | 'participantIds'
 >;

@@ -10,6 +10,7 @@ import {meetingCompositeKey} from '@shared/utils/meeting-identity';
 import type {Meeting} from '@app-types/meeting';
 import {useMeetingsForDay, useUserRole} from '@store/meetings/meetings.selectors';
 import {useMeetingsStore} from '@store/meetings/meetings.store';
+import {useAuthStore} from '@store/auth/auth.store';
 import {MeetingListItem} from './MeetingListItem';
 
 type Props = {
@@ -29,6 +30,8 @@ export const DayMeetingsSheet = memo(
     onSelectMeeting,
   }: Props) => {
     const meetings = useMeetingsForDay(dateISO ?? '');
+    const userUid = useAuthStore(s => s.user?.uid);
+    const shortUidHint = (uid: string) => (uid.length <= 10 ? uid : `${uid.slice(0, 8)}…`);
     const userRole = useUserRole();
     const adminShowAllGlobal = useMeetingsStore(s => s.adminCalendarShowAllGlobal);
     const ownerHints = useMeetingsStore(s => s.ownerHints);
@@ -65,6 +68,15 @@ export const DayMeetingsSheet = memo(
                 meeting={m}
                 onPress={onSelectMeeting}
                 creatorLabel={showOrganizerSubtitle ? ownerHints[m.ownerId] : undefined}
+                subtitle={
+                  showOrganizerSubtitle
+                    ? null
+                    : userUid &&
+                        m.ownerId !== userUid &&
+                        m.participantIds.includes(userUid)
+                      ? `Invitation · Organizer: ${ownerHints[m.ownerId] ?? shortUidHint(m.ownerId)}`
+                      : null
+                }
               />
             ))
           )}

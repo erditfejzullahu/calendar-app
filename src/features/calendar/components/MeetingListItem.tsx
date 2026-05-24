@@ -10,9 +10,11 @@ type Props = {
   meeting: Meeting;
   onPress: (meeting: Meeting) => void;
   creatorLabel?: string | null;
+  /** Extra muted line beneath title (e.g. invitation context). */
+  subtitle?: string | null;
 };
 
-const MeetingListItemBase = memo(({meeting, onPress, creatorLabel}: Props) => (
+const MeetingListItemBase = memo(({meeting, onPress, creatorLabel, subtitle}: Props) => (
   <Pressable
     onPress={() => onPress(meeting)}
     style={({pressed}) => [styles.root, pressed && styles.pressed]}>
@@ -32,6 +34,11 @@ const MeetingListItemBase = memo(({meeting, onPress, creatorLabel}: Props) => (
       {creatorLabel?.trim() ? (
         <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
           Organizer · {creatorLabel.trim()}
+        </AppText>
+      ) : null}
+      {subtitle?.trim() ? (
+        <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
+          {subtitle.trim()}
         </AppText>
       ) : null}
       {meeting.description ? (

@@ -1,5 +1,5 @@
 import {useCallback} from 'react';
-import {RefreshControl, ScrollView, StyleSheet, Switch, View} from 'react-native';
+import {ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Switch, View} from 'react-native';
 import Animated from 'react-native-reanimated';
 import {Screen} from '@shared/components/Screen';
 import {AppHeader} from '@shared/components/AppHeader';
@@ -9,9 +9,11 @@ import {spacing} from '@shared/theme/spacing';
 import {useFadeIn} from '@shared/hooks/useFadeIn';
 import {
   useMeetingsActions,
+  useMeetingsInitialHydrated,
   useMeetingsLoading,
   useUserRole,
 } from '@store/meetings/meetings.selectors';
+import {useAuthStore} from '@store/auth/auth.store';
 import {useMeetingsStore} from '@store/meetings/meetings.store';
 import {CalendarMonthHeader} from '../components/CalendarMonthHeader';
 import {CalendarWeekdays} from '../components/CalendarWeekdays';
@@ -26,10 +28,15 @@ export const CalendarScreen = () => {
   const {year, month, goPrev, goNext, goToday} = useCalendarNavigation();
   const ui = useCalendarScreenUI();
   const animatedStyle = useFadeIn();
+  const authStatus = useAuthStore(s => s.status);
   const {refresh, setAdminCalendarShowAll} = useMeetingsActions();
   const refreshing = useMeetingsLoading();
+  const meetingsHydrated = useMeetingsInitialHydrated();
   const userRole = useUserRole();
   const adminShowAllStored = useMeetingsStore(s => s.adminCalendarShowAllGlobal);
+
+  const calendarBootstrapping =
+    authStatus === 'authenticated' && !meetingsHydrated && refreshing;
 
   const onRefresh = useCallback(() => {
     refresh();
@@ -39,7 +46,7 @@ export const CalendarScreen = () => {
     <Screen edges={['top']}>
       <AppHeader title="Calendar" subtitle="Tap any day to view or add meetings" />
 
-      {userRole === 'admin' ? (
+      {calendarBootstrapping ? null : userRole === 'admin' ? (
         <View style={styles.adminBar}>
           <View style={styles.adminCopy}>
             <AppText variant="bodyStrong">All organizers</AppText>
@@ -61,11 +68,15 @@ export const CalendarScreen = () => {
       <Animated.View style={[styles.body, animatedStyle]}>
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            calendarBootstrapping ? styles.scrollContentBootstrapping : null,
+          ]}
+          scrollEnabled={!calendarBootstrapping}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
+              refreshing={calendarBootstrapping ? true : refreshing}
               onRefresh={onRefresh}
               tintColor={colors.primary}
               colors={[colors.primary]}
@@ -80,15 +91,24 @@ export const CalendarScreen = () => {
             onToday={goToday}
           />
 
-          <View style={styles.card}>
-            <CalendarWeekdays />
-            <CalendarGrid
-              year={year}
-              month={month}
-              selectedDateISO={ui.selectedDate}
-              onSelectDate={ui.selectDate}
-            />
-          </View>
+          {calendarBootstrapping ? (
+            <View style={styles.bootstrapPanel} accessibilityLiveRegion="polite">
+              <ActivityIndicator size="large" color={colors.primary} />
+              <AppText variant="body" color={colors.textMuted} align="center" style={styles.bootstrapCopy}>
+                Loading your calendar…
+              </AppText>
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <CalendarWeekdays />
+              <CalendarGrid
+                year={year}
+                month={month}
+                selectedDateISO={ui.selectedDate}
+                onSelectDate={ui.selectDate}
+              />
+            </View>
+          )}
         </ScrollView>
       </Animated.View>
 
@@ -132,6 +152,23 @@ const styles = StyleSheet.create({
   body: {flex: 1, backgroundColor: colors.bg},
   scrollView: {flex: 1},
   scrollContent: {flexGrow: 1, paddingBottom: spacing.md},
+  scrollContentBootstrapping: {flexGrow: 1},
+  bootstrapPanel: {
+    flexGrow: 1,
+    minHeight: 280,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    paddingVertical: spacing['2xl'],
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bootstrapCopy: {lineHeight: 22, maxWidth: 260},
   card: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,

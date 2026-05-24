@@ -1,3 +1,4 @@
+import {meetingInvolvesUid} from '@shared/utils/meeting-membership';
 import {useMemo} from 'react';
 import type {Meeting} from '@app-types/meeting';
 import {useAuthStore} from '@store/auth/auth.store';
@@ -10,6 +11,24 @@ import {useMeetingsStore} from './meetings.store';
  * the store free of cached/derived state.
  */
 
+function collectUpcomingForUid(
+  order: readonly string[],
+  byId: Readonly<Record<string, Meeting | undefined>>,
+  uid: string | null | undefined,
+  limit?: number,
+): Meeting[] {
+  const now = Date.now();
+  const result: Meeting[] = [];
+  for (const id of order) {
+    const m = byId[id];
+    if (m && m.startsAt >= now && meetingInvolvesUid(m, uid)) {
+      result.push(m);
+      if (limit !== undefined && result.length >= limit) break;
+    }
+  }
+  return result;
+}
+
 /** Stable accessor for the action callbacks; never re-renders consumers. */
 export const useMeetingsActions = () => useMeetingsStore(s => s.actions);
 
@@ -18,6 +37,8 @@ export const useUserRole = () => useMeetingsStore(s => s.userRole);
 
 export const useMeetingsLoading = () => useMeetingsStore(s => s.loading);
 export const useMeetingsError = () => useMeetingsStore(s => s.error);
+/** False until the active meetings subscription writes its first merged snapshot into indexes after sign-in. */
+export const useMeetingsInitialHydrated = () => useMeetingsStore(s => s.meetingsInitialHydrated);
 
 /** All meetings on a given dateISO, sorted by start time. */
 export const useMeetingsForDay = (dateISO: string): Meeting[] => {
@@ -39,22 +60,20 @@ export const useMeetingCountsByDate = (): Record<string, number> => {
   }, [byDate]);
 };
 
+/** Upcoming preview with a numeric cap — useful for dashboards that only need first N slots. */
 export const useUpcomingMeetings = (limit: number = 5): Meeting[] => {
   const uid = useAuthStore(s => s.user?.uid);
   const order = useMeetingsStore(s => s.order);
   const byId = useMeetingsStore(s => s.byId);
-  return useMemo(() => {
-    const now = Date.now();
-    const result: Meeting[] = [];
-    for (const id of order) {
-      const m = byId[id];
-      if (m && m.startsAt >= now && (!uid || m.ownerId === uid)) {
-        result.push(m);
-        if (result.length >= limit) break;
-      }
-    }
-    return result;
-  }, [order, byId, limit, uid]);
+  return useMemo(() => collectUpcomingForUid(order, byId, uid, limit), [order, byId, limit, uid]);
+};
+
+/** Every meeting that has not yet started (`startsAt`), ordered by calendar index, organizer or participant. */
+export const useAllUpcomingMeetings = (): Meeting[] => {
+  const uid = useAuthStore(s => s.user?.uid);
+  const order = useMeetingsStore(s => s.order);
+  const byId = useMeetingsStore(s => s.byId);
+  return useMemo(() => collectUpcomingForUid(order, byId, uid), [order, byId, uid]);
 };
 
 export const useUpcomingCount = (): number => {
@@ -66,7 +85,7 @@ export const useUpcomingCount = (): number => {
     let n = 0;
     for (const id of order) {
       const m = byId[id];
-      if (m && m.startsAt >= now && (!uid || m.ownerId === uid)) {
+      if (m && m.startsAt >= now && meetingInvolvesUid(m, uid)) {
         n++;
       }
     }

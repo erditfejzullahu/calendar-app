@@ -19,7 +19,7 @@ import {useProfileViewModel} from '../hooks/useProfileViewModel';
 import {userRoleLabel} from '../utils/user-role-display';
 
 export const ProfileScreen = () => {
-  const {user, stats, upcoming} = useProfileViewModel();
+  const {user, stats, upcomingMeetingsAll} = useProfileViewModel();
   const {signOut} = useAuthActions();
   const {refresh} = useMeetingsActions();
   const refreshing = useMeetingsLoading();
@@ -73,7 +73,7 @@ export const ProfileScreen = () => {
             upcoming={stats.upcoming}
           />
 
-          <UpcomingMeetingsList meetings={upcoming} onMeetingPress={setSelectedMeeting} />
+          <UpcomingMeetingsList meetings={upcomingMeetingsAll} onMeetingPress={setSelectedMeeting} />
 
           <View style={styles.footer}>
             <Button

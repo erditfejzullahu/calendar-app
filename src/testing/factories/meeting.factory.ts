@@ -7,6 +7,7 @@ export const buildMeeting = (overrides: Partial<Meeting> = {}): Meeting => {
   const base: Meeting = {
     id: 'meeting-1',
     ownerId: 'user-1',
+    participantIds: [],
     title: 'Team sync',
     description: null,
     dateISO: '2026-05-24',

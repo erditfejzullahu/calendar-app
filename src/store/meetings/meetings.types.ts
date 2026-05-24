@@ -2,6 +2,12 @@ import type {Meeting, MeetingDraft} from '@app-types/meeting';
 import type {UserRole, UserStats} from '@app-types/user';
 import {emptyUserStats} from '@app-types/user';
 
+/** Cached `users/{uid}` profile fields — two-line attendee UI and derived labels. */
+export type MeetingUserPeek = {
+  displayName: string;
+  email: string;
+};
+
 /** Snapshot fields from Firestore user doc beside meetings. */
 export type UserDocExtras = {
   stats: UserStats;
@@ -19,8 +25,15 @@ export type MeetingsSlice = {
   userRole: UserRole | null;
   /** Admin-only calendar: when true + role admin, stream all users’ meetings via collectionGroup. */
   adminCalendarShowAllGlobal: boolean;
-  /** Resolved labels keyed by Firebase uid (admin roster). */
+  /** Resolved compact labels (`uid` → `Name · email` fallback) — lists, subtitles. */
   ownerHints: Record<string, string>;
+  /** Same Firestore `/users/{uid}` snapshot as structured fields — detail attendee rows. */
+  userPeekByUid: Record<string, MeetingUserPeek>;
+  /**
+   * Becomes true after meetings listener delivers at least one snapshot into indexes
+   * (includes empty agendas). Reset on bind / `_reset` so post sign-in calendars wait on Firestore.
+   */
+  meetingsInitialHydrated: boolean;
   loading: boolean;
   error: string | null;
 };
@@ -33,6 +46,8 @@ export type MeetingsActions = {
   refresh: () => void;
   /** Persisted toggle for admins; silently no-ops for non-admins. */
   setAdminCalendarShowAll: (showAll: boolean) => void;
+  /** Fetches `/users` display payloads for attendee + organizer IDs on these meetings (idempotent cache). */
+  prefetchUserProfilesForMeetings: (meetings: Meeting[]) => void;
 };
 
 /**
@@ -58,6 +73,8 @@ export const initialMeetingsSlice: MeetingsSlice = {
   userRole: null,
   adminCalendarShowAllGlobal: false,
   ownerHints: {},
+  userPeekByUid: {},
+  meetingsInitialHydrated: false,
   loading: false,
   error: null,
 };

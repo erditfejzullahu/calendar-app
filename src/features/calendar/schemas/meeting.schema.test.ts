@@ -12,6 +12,7 @@ describe('buildMeetingSchema', () => {
       dateISO,
       startTime: '09:00',
       endTime: '10:00',
+      participantIds: [],
     });
     expect(parsed.success).toBe(true);
   });
@@ -24,6 +25,7 @@ describe('buildMeetingSchema', () => {
       dateISO,
       startTime: '09:00',
       endTime: '10:00',
+      participantIds: [],
     });
     expect(parsed.success).toBe(false);
   });
@@ -36,6 +38,7 @@ describe('buildMeetingSchema', () => {
       dateISO,
       startTime: '9:00',
       endTime: '10:00',
+      participantIds: [],
     });
     expect(parsed.success).toBe(false);
   });
@@ -48,6 +51,7 @@ describe('buildMeetingSchema', () => {
       dateISO,
       startTime: '11:00',
       endTime: '10:00',
+      participantIds: [],
     });
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
@@ -71,6 +75,7 @@ describe('buildMeetingSchema', () => {
       dateISO,
       startTime: '10:30',
       endTime: '11:30',
+      participantIds: [],
     });
     expect(parsed.success).toBe(false);
     if (!parsed.success) {

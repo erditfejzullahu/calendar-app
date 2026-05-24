@@ -24,8 +24,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null
-        && (request.auth.uid == userId || isSignedInAdmin());
+      /** Organizers assign participants via a picker that reads display names/emails across users. */
+      allow read: if request.auth != null;
 
       /** Profile bootstrap + normal merges — only yourself. */
       allow create: if request.auth != null && request.auth.uid == userId;
@@ -45,7 +45,14 @@ service cloud.firestore {
       match /meetings/{meetingId} {
 
         allow read: if request.auth != null
-          && (request.auth.uid == userId || isSignedInAdmin());
+          && (
+            request.auth.uid == userId
+            || isSignedInAdmin()
+            || (
+              resource.data.participantIds is list
+              && resource.data.participantIds.hasAny([request.auth.uid])
+            )
+          );
 
         // Create meeting doc (batch also updates parent user stats — handled above)
         allow create: if request.auth != null
