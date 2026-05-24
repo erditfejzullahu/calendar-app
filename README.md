@@ -1,13 +1,13 @@
 # CalendarApp
 
-A senior-grade React Native **0.85.3** (bare CLI, **no Expo**) calendar application with Firebase Authentication & Firestore on the **modular `firebase-js-sdk`-style API**, a fully **hand-rolled** monthly calendar grid, react-hook-form + Zod, and a feature-sliced architecture built around **Zustand v5** stores with granular selector subscriptions for minimal re-renders.
+A React Native **0.85.3** (bare CLI, **no Expo**) calendar application with Firebase Authentication & Firestore on the **modular `firebase-js-sdk`-style API**, shared **participant invites** ( **`participantIds` + collection-group merge** ), an animated **splash** on cold start, a fully **hand-rolled** monthly calendar grid, react-hook-form + Zod, and feature-sliced **Zustand v5** with granular selectors for minimal re-renders.
 
 ### Stack at a glance
 
 | Layer | Version |
 |---|---|
 | React Native | **0.85.3** (New Architecture, Bridgeless — required since 0.83) |
-| React | **19.2.0** |
+| React | **19.2.3** |
 | Node | **≥ 20.19.4** (Active LTS) |
 | TypeScript | **5.9.2** |
 | State | **Zustand 5** (curried `create<T>()(…)` form) |
@@ -15,6 +15,7 @@ A senior-grade React Native **0.85.3** (bare CLI, **no Expo**) calendar applicat
 | Navigation | **React Navigation v7** (`react-native-screens` v4 required by native-stack) |
 | Firebase | **@react-native-firebase 24** — modular API (`getAuth`, `getFirestore`, `writeBatch`, `increment`, …) |
 | Forms | react-hook-form 7 + zod 3 |
+| Secure quick login | **`react-native-keychain`** — see **`src/services/biometric-login.service.ts`** |
 
 ---
 
@@ -76,30 +77,91 @@ Confirm **Authentication → Sign-in methods → Email/Password** is enabled and
 
 ### Biometric quick sign-in (Face ID / Touch ID / fingerprint)
 
-After a successful email/password sign-in, the app can offer to save credentials in **`react-native-keychain`**, guarded by **`BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE`** (biometrics or device PIN). **Signing out clears the Firebase session only** — the encrypted quick-login blob stays until the password changes in profile (**`applyProfileUpdates`**) or the user wipes app data / uninstalls. **`NSFaceIDUsageDescription`** is set in **`ios/CalendarApp/Info.plist`**; rebuild iOS (**`pod install`**) after adding **`react-native-keychain`**.
+After a successful email/password sign-in, the app can offer to save credentials in **`react-native-keychain`**, guarded by **`BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE`** (biometrics or device PIN). **Retrieval passes the same `accessControl`** as storage so Android resolves the Keystore biometric flow correctly (`getGenericPassword` / `setGenericPassword`). **Signing out clears the Firebase session only** — the encrypted quick-login entry persists so you can use biometrics again on the Sign In screen. It is cleared when **`applyProfileUpdates`** changes your **password**, or when the user wipes app data / uninstalls. **`NSFaceIDUsageDescription`** is in **`ios/CalendarApp/Info.plist`** (run **`pod install`** after adding **`react-native-keychain`**).
 
-Firestore stores meetings **under each signed-in user**:
+### Firestore data model (`users/{uid}/meetings`)
 
 - Path: **`users/{userId}/meetings/{meetingId}`**
 - Implemented in **`src/services/firebase/meetings.service.ts`** (`meetingsCol(uid)`).
-- **Admin calendar toggle:** Users with **`users/{uid}.role == "admin"`** in Firestore can turn on **All organizers** on the Calendar tab. That listens to **every** organizer’s bookings via **`collectionGroup("meetings")`** (`subscribeMeetingsAcrossAllUsers`). Deploy the composite index from **`firestore.indexes.json`** (or follow the Firebase Console URL printed on first listener failure): collection group **`meetings`**, field **`startsAt`** ascending. **Rules** must let admins read other users’ meeting subcollections—the checked-in **`firestore.rules`** includes that pattern alongside normal self-only reads.
+- **`participantIds`** lists invited attendee Auth UIDs; display names/emails are loaded on demand (**`fetchMeetingUserDisplayBundle`**) rather than duplicated on each meeting doc.
+- **Default (non-admin) calendar** merges (**`subscribeOwnMeetingsMergedWithParticipantInvites`**): (**1**) organizer subcollection via **`subscribeAll`**, (**2**) collection-group **`array-contains`** on **`participantIds`** for meetings hosted by someone else where you’re invited. Rows are merged, deduped by **`ownerId:id`**, with invited snapshots sorted by **`startsAt` in-memory** so a composite **`(participantIds, startsAt)`** index isn’t required.
+- **Participant listener errors no longer wipe the cached invite list** before reconnect (avoids flashing empty calendars on transient failures).
+- **After a successful meeting `update`,** **`actions.refresh()`** rewires Firestore listeners so indexes and merged views stay authoritative (date moves, invites, stale collection-group cache, etc.).
+- **Admin calendar toggle:** **`users/{uid}.role == "admin"`** can enable **All organizers** on Calendar — **`collectionGroup("meetings")`** via **`subscribeMeetingsAcrossAllUsers`**. Needs the **`startsAt`** index below.
 
-Security rules scoped only to a **top-level** collection **`meetings/{meetingId}`** do **not** apply to **`users/.../meetings/...`**, so writes will fail with **`permission-denied`**.
+### Firestore indexes
 
-Paste the canonical rules below into Firebase Console → **Firestore Database → Rules** (or deploy the checked-in **`firestore.rules`** via Firebase CLI). They nest **`meetings`** under **`users`**, optionally with stricter `create`/`update` checks aligned with app fields (`ownerId`, `id`, `startsAt`, `endsAt`).
+Deploy **`firestore.indexes.json`** (`firebase deploy --only firestore:indexes` or mirror entries in Console):
+
+| Config | Purpose |
+|--------|---------|
+| Collection group **`meetings`**, **`startsAt`** ascending | Admin global calendar **`orderBy('startsAt')`**. |
+| Field override **`participantIds`** · **`COLLECTION_GROUP`** · **`CONTAINS`** | Enables **`participantIds` array-contains** on the **`meetings`** collection group without a composite with **`startsAt`**. |
+
+The calendar grid badges days using each doc’s **`dateISO`** field.
+
+Security rules scoped only to a **root-level** **`meetings/{meetingId}`** collection **do not** apply to **`users/.../meetings/...`**, so misplaced rules produce **`permission-denied`**. Rules **must** allow invited users to **`read`** a host doc when **`request.auth.uid`** is in **`resource.data.participantIds`** — see **`firestore.rules`** in-repo.
+
+Paste the canonical rules snippet below into Firebase Console → **Firestore Database → Rules** (or deploy **`firestore.rules`** via Firebase CLI).
 
 ```
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    //
+    // This app stores meetings UNDER each user doc:
+    //   users/{userId}/meetings/{meetingId}
+    // (see src/services/firebase/meetings.service.ts)
+    //
+    // Rules scoped only to "/meetings/{meetingId}" at the DATABASE ROOT
+    // do NOT apply to subcollections and will produce permission-denied.
+    //
+
+    function userRole(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+
+    /** Role is mirrored on Firestore users/{uid}.role (NOT Auth custom claims here). */
+    function isSignedInAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userRole(request.auth.uid) == 'admin';
+    }
+
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      /** Organizers assign participants via a picker that reads display names/emails across users. */
+      allow read: if request.auth != null;
+
+      /** Profile bootstrap + normal merges — only yourself. */
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      /**
+       * Stats/counters merged from meeting batches (`stats.meetings*`) live on this doc.
+       * Organizers update their own profile; admins need update when fixing another user's
+       * meetings (same batch touches `meetings/` + stats here), which `allow write: self only`
+       * incorrectly blocked (`permission-denied` on the whole batch).
+       */
+      allow update: if request.auth != null
+        && (request.auth.uid == userId || isSignedInAdmin());
+
+      /** Optional: callers may delete own user root doc; admins do not wipe profiles via app. */
+      allow delete: if request.auth != null && request.auth.uid == userId;
 
       match /meetings/{meetingId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
 
+        allow read: if request.auth != null
+          && (
+            request.auth.uid == userId
+            || isSignedInAdmin()
+            || (
+              resource.data.participantIds is list
+              && resource.data.participantIds.hasAny([request.auth.uid])
+            )
+          );
+
+        // Create meeting doc (batch also updates parent user stats — handled above)
         allow create: if request.auth != null
           && request.auth.uid == userId
           && request.resource.data.ownerId == request.auth.uid
@@ -109,29 +171,45 @@ service cloud.firestore {
           && request.resource.data.endsAt > request.resource.data.startsAt;
 
         allow update: if request.auth != null
-          && request.auth.uid == userId
-          && resource.data.ownerId == request.auth.uid
-          && request.resource.data.ownerId == request.auth.uid
-          && request.resource.data.endsAt > request.resource.data.startsAt;
+          && (
+            (
+              request.auth.uid == userId
+              && resource.data.ownerId == request.auth.uid
+              && request.resource.data.ownerId == request.auth.uid
+              && request.resource.data.endsAt > request.resource.data.startsAt
+            )
+            || (
+              isSignedInAdmin()
+              && resource.data.ownerId == userId
+              && request.resource.data.ownerId == resource.data.ownerId
+              && request.resource.data.endsAt > request.resource.data.startsAt
+            )
+          );
 
         allow delete: if request.auth != null
-          && request.auth.uid == userId
-          && resource.data.ownerId == request.auth.uid;
+          && (
+            (request.auth.uid == userId && resource.data.ownerId == request.auth.uid)
+            || (isSignedInAdmin() && resource.data.ownerId == userId)
+          );
       }
     }
+
+    //
+    // If you later ADD a TOP-LEVEL /meetings/{meetingId} collection (sharing,
+    // org-wide calendar, etc.), define that match HERE with its own rules.
+    //
   }
 }
-```
 
-For a permissive MVP (fewer validations), **`allow read, write` on `/users/{userId}` and nested `/meetings/{meetingId}`** only when **`request.auth.uid == userId`** is enough — see **`firestore.rules`** in the repo comments for variations.
+```
 
 ---
 
 ## 3. Run
 
 ```bash
-npm run android   # or npm run ios
 npm start         # metro
+npm run android   # or npm run ios
 ```
 
 ---
@@ -142,7 +220,8 @@ npm start         # metro
 src/
 ├── app/                       App entry, navigation, bootstrap
 │   ├── Root.tsx
-│   ├── hooks/useAppBootstrap.ts   # Wires Firebase listeners → Zustand
+│   ├── components/SplashGate.tsx  # Animated cold-start overlay (until auth settles)
+│   ├── hooks/useAppBootstrap.ts   # Firebase auth listener + meetings bind by uid
 │   ├── providers/AppProviders.tsx # SafeArea + GestureHandler + NavContainer
 │   └── navigation/
 │       ├── RootNavigator.tsx
@@ -170,8 +249,10 @@ src/
 │   └── meetings/
 │       ├── meetings.types.ts
 │       ├── meetings.store.ts      # create() + bindMeetingsToUser(uid)
-│       └── meetings.selectors.ts  # useMeetingsForDay, useMeetingStats, …
-├── services/firebase/         Thin wrappers over @react-native-firebase
+│       └── meetings.selectors.ts  # useMeetingsForDay, useAllUpcomingMeetings, …
+├── services/
+│   ├── firebase/              Auth, Firestore (meetings, users)
+│   └── biometric-login.service.ts
 └── types/                     Cross-cutting domain types
 ```
 
@@ -182,20 +263,31 @@ src/
 - **Stable `actions` slot** — both stores expose all callbacks under a nested `actions: {…}` object set once at store creation. `useAuthActions()` / `useMeetingsActions()` consumers therefore never re-render after first mount, the same property a split state/dispatch context pattern would give you.
 - **Internal mutators are namespaced** — the meetings store separates the public `actions` (create/update/delete) from `internal` mutators (`_hydrateMeetings`, `_setError`, `_reset`) so feature code cannot accidentally bypass Firestore.
 - **Side-effect bridge** — `useAppBootstrap()` runs once at app start: it kicks off the Firebase auth listener and watches the user's uid; when the uid changes it calls `bindMeetingsToUser(uid)`, which (un)subscribes the Firestore listeners that pump data into the meetings store. Single source of truth for per-user lifecycle.
-- **Derived data is memoized** — selectors return raw store slices; computed views (`useUpcomingMeetings`, `useMeetingStats`) wrap them in `useMemo` so derived arrays/objects keep stable references between renders.
+- **`meetingsInitialHydrated`** — **`false`** until the active subscription’s first **`_hydrateMeetings`** completes; Calendar uses it for a dedicated first-load spinner (authenticated users don’t stare at an empty grid while Firestore attaches).
+- **Derived data is memoized** — selectors expose stable shapes via `useMemo` (`useMeetingsForDay`, **`useMeetingStats`**, **`useUpcomingMeetings(limit)`**, **`useAllUpcomingMeetings`** for the unpaged list). **`useMeetingStats().upcoming`** counts all future meetings involving the user; the Profile preview lists them in pages of five with **Previous / Next**.
+- **Pull / refresh** — **`useMeetingsActions().refresh`** forces a listener rewind (manual refresh and post-edit hydration).
 
 ### Custom Calendar
 
-`useCalendarMatrix(year, month)` returns a typed `6×7` matrix of day cells (with `inCurrentMonth`, `isToday`, `dateISO`). The grid is pure RN `<View>` flexbox — no calendar libraries.
+`useCalendarMatrix(year, month)` returns a typed `6×7` matrix of day cells (with `inCurrentMonth`, `isToday`, `dateISO`). The grid is pure RN `<View>` flexbox — no calendar libraries. Participant-assigned meetings use the **`dateISO`** field for day badges (keep it aligned with **`startsAt`** when editing).
 
 ### Forms & Validation
 
-`react-hook-form` + `@hookform/resolvers/zod`. The create-meeting flow validates:
-- `title` length
-- `endTime` strictly after `startTime`
-- **No overlap** with existing same-day meetings (passed into the resolver via Zod `superRefine`).
+`react-hook-form` + `@hookform/resolvers/zod`. Meeting create/update validates **`title`**, **`endTime` after `startTime`**, **same-day overlaps**, and can assign **`participantIds`** (picker reads the users directory scoped by **`firestore.rules`**).
 
 ### Animations
 
-- `react-native-reanimated` for animated bottom-tab indicator and fade/slide screen entries.
-- Native-stack `animation: 'slide_from_right'` + `animationDuration` configured in `transitions.ts`.
+- `react-native-reanimated` — bottom-tab indicator, **`SplashGate`** staged entrance + dissolve once auth is ready (minimum dwell ~2s), and shared **`useFadeIn`** for screen fades.
+- Native-stack **`animation: 'slide_from_right'`** + **`animationDuration`** in `transitions.ts`.
+
+### Repo hygiene
+
+**.gitignore** excludes common regenerated native artefacts (`**/.cxx/`, Ninja/CMake noise, Gradle caches — see `.gitignore` for the authoritative list).
+
+### Tests / quality gates
+
+```bash
+npm run tsc       # typecheck (no emit)
+npm test          # Jest
+npm run lint      # ESLint
+```
