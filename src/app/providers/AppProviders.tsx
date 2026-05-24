@@ -3,6 +3,8 @@ import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {colors} from '@shared/theme/colors';
+import {enableScreens} from 'react-native-screens';
+enableScreens(true);
 
 /**
  * Store providers were removed when we migrated to Zustand — stores live at
