@@ -5,7 +5,7 @@ import BottomSheetModal from '@shared/components/BottomSheetModal';
 import {Button} from '@shared/components/Button';
 import {TextField} from '@shared/components/TextField';
 import {AppText} from '@shared/components/Text';
-import TimePickerBottomSheet from '@shared/components/TimePickerBottomSheet';
+import {TimePickerContent} from '@shared/components/TimePickerContent';
 import {colors} from '@shared/theme/colors';
 import {radius} from '@shared/theme/radius';
 import {spacing} from '@shared/theme/spacing';
@@ -28,6 +28,8 @@ type FormBodyProps = {
   onClose: () => void;
 };
 
+type TimeFieldKey = 'startTime' | 'endTime';
+
 export const CreateMeetingModal = memo(({visible, dateISO, editing, onClose}: Props) => {
   const ready = Boolean(visible && dateISO);
 
@@ -45,9 +47,7 @@ export const CreateMeetingModal = memo(({visible, dateISO, editing, onClose}: Pr
   );
 });
 
-type TimeFieldKey = 'startTime' | 'endTime';
-
-const FormBody = memo(({dateISO, editing, onClose}: FormBodyProps) => {
+export const CreateMeetingFormBody = memo(({dateISO, editing, onClose}: FormBodyProps) => {
   const organizerUid = editing?.ownerId ?? useAuthStore(s => s.user?.uid);
   const {form, submit} = useCreateMeetingForm({
     dateISO,
@@ -65,8 +65,23 @@ const FormBody = memo(({dateISO, editing, onClose}: FormBodyProps) => {
     return '09:00';
   }, [timePickerKind, startTimeWatch, endTimeWatch]);
 
-  const pickerTitle =
-    timePickerKind === 'startTime' ? 'Start time' : timePickerKind === 'endTime' ? 'End time' : '';
+  if (timePickerKind !== null) {
+    return (
+      <TimePickerContent
+        active
+        initialHHmm={pickerInitial}
+        onClose={() => setTimePickerKind(null)}
+        onConfirm={hhmm => {
+          form.setValue(timePickerKind, hhmm, {
+            shouldValidate: true,
+            shouldTouch: true,
+            shouldDirty: true,
+          });
+          setTimePickerKind(null);
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -78,107 +93,95 @@ const FormBody = memo(({dateISO, editing, onClose}: FormBodyProps) => {
         keyboardShouldPersistTaps="handled"
         overScrollMode="never"
         bounces={false}>
-      <AppText variant="caption" color={colors.textMuted}>
-        {formatPrettyDate(dateISO)}
-      </AppText>
+        <AppText variant="caption" color={colors.textMuted}>
+          {formatPrettyDate(dateISO)}
+        </AppText>
 
-      <Controller
-        control={control}
-        name="title"
-        render={({field: {value, onChange, onBlur}}) => (
-          <TextField
-            label="Title"
-            placeholder="Team sync"
-            value={value}
-            onChangeText={onChange}
-            onBlur={onBlur}
-            error={formState.errors.title?.message}
-          />
-        )}
-      />
+        <Controller
+          control={control}
+          name="title"
+          render={({field: {value, onChange, onBlur}}) => (
+            <TextField
+              label="Title"
+              placeholder="Team sync"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              error={formState.errors.title?.message}
+            />
+          )}
+        />
 
-      <View style={styles.row}>
-        <View style={styles.half}>
-          <AppText variant="caption" color={colors.textMuted} style={styles.fieldLabel}>
-            Start
-          </AppText>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Choose start time"
-            style={[styles.timeTouchable, !!formState.errors.startTime?.message && styles.timeTouchableError]}
-            onPress={() => setTimePickerKind('startTime')}>
-            <AppText variant="bodyStrong">{startTimeWatch}</AppText>
-          </Pressable>
-          {formState.errors.startTime?.message ? (
-            <AppText variant="caption" color={colors.danger} style={styles.fieldError}>
-              {formState.errors.startTime.message}
+        <View style={styles.row}>
+          <View style={styles.half}>
+            <AppText variant="caption" color={colors.textMuted} style={styles.fieldLabel}>
+              Start
             </AppText>
-          ) : null}
-        </View>
-        <View style={styles.half}>
-          <AppText variant="caption" color={colors.textMuted} style={styles.fieldLabel}>
-            End
-          </AppText>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Choose end time"
-            style={[styles.timeTouchable, !!formState.errors.endTime?.message && styles.timeTouchableError]}
-            onPress={() => setTimePickerKind('endTime')}>
-            <AppText variant="bodyStrong">{endTimeWatch}</AppText>
-          </Pressable>
-          {formState.errors.endTime?.message ? (
-            <AppText variant="caption" color={colors.danger} style={styles.fieldError}>
-              {formState.errors.endTime.message}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choose start time"
+              style={[styles.timeTouchable, !!formState.errors.startTime?.message && styles.timeTouchableError]}
+              onPress={() => setTimePickerKind('startTime')}>
+              <AppText variant="bodyStrong">{startTimeWatch}</AppText>
+            </Pressable>
+            {formState.errors.startTime?.message ? (
+              <AppText variant="caption" color={colors.danger} style={styles.fieldError}>
+                {formState.errors.startTime.message}
+              </AppText>
+            ) : null}
+          </View>
+          <View style={styles.half}>
+            <AppText variant="caption" color={colors.textMuted} style={styles.fieldLabel}>
+              End
             </AppText>
-          ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choose end time"
+              style={[styles.timeTouchable, !!formState.errors.endTime?.message && styles.timeTouchableError]}
+              onPress={() => setTimePickerKind('endTime')}>
+              <AppText variant="bodyStrong">{endTimeWatch}</AppText>
+            </Pressable>
+            {formState.errors.endTime?.message ? (
+              <AppText variant="caption" color={colors.danger} style={styles.fieldError}>
+                {formState.errors.endTime.message}
+              </AppText>
+            ) : null}
+          </View>
         </View>
-      </View>
 
-      <Controller
-        control={control}
-        name="description"
-        render={({field: {value, onChange, onBlur}}) => (
-          <TextField
-            label="Description (optional)"
-            placeholder="Agenda, links, notes…"
-            multiline
-            value={value ?? ''}
-            onChangeText={onChange}
-            onBlur={onBlur}
-            error={formState.errors.description?.message}
-          />
-        )}
-      />
+        <Controller
+          control={control}
+          name="description"
+          render={({field: {value, onChange, onBlur}}) => (
+            <TextField
+              label="Description (optional)"
+              placeholder="Agenda, links, notes…"
+              multiline
+              value={value ?? ''}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              error={formState.errors.description?.message}
+            />
+          )}
+        />
 
-      <ParticipantAssignmentsField control={control} excludeUid={organizerUid ?? null} />
+        <ParticipantAssignmentsField control={control} excludeUid={organizerUid ?? null} />
 
-      <Button
-        label={editing ? 'Save changes' : 'Create meeting'}
-        onPress={submit}
-        loading={formState.isSubmitting}
-        fullWidth
-        size="lg"
-      />
-    </ScrollView>
-
-    <TimePickerBottomSheet
-      visible={timePickerKind !== null}
-      title={pickerTitle}
-      initialHHmm={pickerInitial}
-      onClose={() => setTimePickerKind(null)}
-      onConfirm={hhmm => {
-        if (timePickerKind === 'startTime' || timePickerKind === 'endTime') {
-          form.setValue(timePickerKind, hhmm, {
-            shouldValidate: true,
-            shouldTouch: true,
-            shouldDirty: true,
-          });
-        }
-      }}
-    />
+        <Button
+          label={editing ? 'Save changes' : 'Create meeting'}
+          onPress={submit}
+          loading={formState.isSubmitting}
+          fullWidth
+          size="lg"
+        />
+      </ScrollView>
     </>
   );
 });
+
+CreateMeetingFormBody.displayName = 'CreateMeetingFormBody';
+
+const FormBody = CreateMeetingFormBody;
 
 const styles = StyleSheet.create({
   body: {gap: spacing.md, paddingBottom: spacing.lg},

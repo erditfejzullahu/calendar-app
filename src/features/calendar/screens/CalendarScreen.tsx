@@ -42,6 +42,14 @@ export const CalendarScreen = () => {
     refresh();
   }, [refresh]);
 
+  const activeSheet = ui.createOpen
+    ? 'create'
+    : ui.activeMeeting
+      ? 'meeting'
+      : ui.daySheetOpen
+        ? 'day'
+        : null;
+
   return (
     <Screen edges={['top']}>
       <AppHeader title="Calendar" subtitle="Tap any day to view or add meetings" />
@@ -112,21 +120,27 @@ export const CalendarScreen = () => {
         </ScrollView>
       </Animated.View>
 
-      <DayMeetingsSheet
-        visible={ui.daySheetOpen}
-        dateISO={ui.selectedDate}
-        onClose={ui.closeDay}
-        onCreate={ui.openCreate}
-        onSelectMeeting={ui.openMeeting}
-      />
+      {activeSheet === 'day' ? (
+        <DayMeetingsSheet
+          visible
+          dateISO={ui.selectedDate}
+          onClose={ui.closeDay}
+          onCreate={ui.openCreate}
+          onSelectMeeting={ui.openMeeting}
+        />
+      ) : null}
 
-      <CreateMeetingModal
-        visible={ui.createOpen}
-        dateISO={ui.selectedDate}
-        onClose={ui.closeCreate}
-      />
+      {activeSheet === 'create' ? (
+        <CreateMeetingModal
+          visible
+          dateISO={ui.selectedDate}
+          onClose={ui.closeCreate}
+        />
+      ) : null}
 
-      <MeetingDetailsModal meeting={ui.activeMeeting} onClose={ui.closeMeeting} />
+      {activeSheet === 'meeting' && ui.activeMeeting ? (
+        <MeetingDetailsModal meeting={ui.activeMeeting} onClose={ui.closeMeeting} />
+      ) : null}
     </Screen>
   );
 };

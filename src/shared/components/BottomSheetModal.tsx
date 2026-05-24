@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import {Gesture, GestureDetector, GestureHandlerRootView} from 'react-native-gesture-handler';
+import {FullWindowOverlay} from 'react-native-screens';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -48,23 +49,23 @@ function BottomSheetModalInner({visible, onClose, title, children, maxHeight}: P
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
 
+  const isPresented = visible || mounted;
+
   const finalizeDismiss = useCallback(() => {
     if (!visibleRef.current) setMounted(false);
   }, []);
 
-  // Open path: useLayoutEffect fires synchronously before the first paint so
-  // mount + animation start are atomic — the sheet is already moving on the
-  // very first rendered frame; no frozen delay.
   useLayoutEffect(() => {
     if (!visible) return;
     setMounted(true);
+    cancelAnimation(overlay);
+    cancelAnimation(translateY);
     overlay.value = 0;
     translateY.value = travel;
     overlay.value = withTiming(1, {duration: OVERLAY_MS, easing: Easing.out(Easing.quad)});
     translateY.value = withSpring(0, {damping: 22, stiffness: 200, mass: 0.85});
   }, [visible, travel, overlay, translateY]);
 
-  // Close path: fade + slide out, then unmount after animation completes.
   useEffect(() => {
     if (visible || !mounted) return;
     cancelAnimation(overlay);
@@ -79,12 +80,9 @@ function BottomSheetModalInner({visible, onClose, title, children, maxHeight}: P
     );
   }, [visible, mounted, overlay, translateY, travel, finalizeDismiss]);
 
-  // Pan gesture lives on the drag-handle area only so it never fights the
-  // ScrollView inside the sheet.
   const pan = Gesture.Pan()
-    .activeOffsetY([0, 8]) // only activate on a clear downward drag
+    .activeOffsetY([0, 8])
     .onUpdate(e => {
-      // Clamp to avoid dragging upward past resting position.
       translateY.value = Math.max(0, e.translationY);
     })
     .onEnd(e => {
@@ -99,7 +97,6 @@ function BottomSheetModalInner({visible, onClose, title, children, maxHeight}: P
         );
         runOnJS(onClose)();
       } else {
-        // Snap back to fully open position.
         translateY.value = withSpring(0, {damping: 22, stiffness: 200});
       }
     });
@@ -109,46 +106,60 @@ function BottomSheetModalInner({visible, onClose, title, children, maxHeight}: P
     transform: [{translateY: translateY.value}],
   }));
 
-  if (!mounted) return null;
+  if (!isPresented) return null;
+
+  const sheetBody = (
+    <GestureHandlerRootView style={styles.flex}>
+      <Animated.View
+        style={[StyleSheet.absoluteFill, styles.overlay, overlayStyle]}
+        pointerEvents={visible ? 'auto' : 'none'}>
+        <Pressable accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={onClose} />
+      </Animated.View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.kbAvoider}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        pointerEvents="box-none">
+        <Animated.View
+          collapsable={false}
+          style={[styles.sheet, maxHeight ? {maxHeight} : null, sheetStyle]}>
+          <GestureDetector gesture={pan}>
+            <View style={styles.dragArea}>
+              <View style={styles.grabber} />
+              {title ? (
+                <AppText variant="titleMd" style={styles.title}>
+                  {title}
+                </AppText>
+              ) : null}
+            </View>
+          </GestureDetector>
+
+          {children}
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </GestureHandlerRootView>
+  );
+
+  // iOS RN Modal stacks poorly (invisible overlays block touches). FullWindowOverlay
+  // renders above the native hierarchy without Modal stacking bugs.
+  if (Platform.OS === 'ios') {
+    return (
+      <FullWindowOverlay unstable_accessibilityContainerViewIsModal>
+        {sheetBody}
+      </FullWindowOverlay>
+    );
+  }
 
   return (
     <Modal
       transparent
       animationType="none"
       hardwareAccelerated
-      visible={mounted}
+      visible={isPresented}
       statusBarTranslucent
-      presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
       onRequestClose={onClose}>
-      <GestureHandlerRootView style={styles.flex}>
-        <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, overlayStyle]}>
-          <Pressable accessibilityRole="button" style={StyleSheet.absoluteFill} onPress={onClose} />
-        </Animated.View>
-
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.kbAvoider}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-          pointerEvents="box-none">
-          <Animated.View
-            collapsable={false}
-            style={[styles.sheet, maxHeight ? {maxHeight} : null, sheetStyle]}>
-            {/* Drag area: grabber pill + title — gesture is scoped here only */}
-            <GestureDetector gesture={pan}>
-              <View style={styles.dragArea}>
-                <View style={styles.grabber} />
-                {title ? (
-                  <AppText variant="titleMd" style={styles.title}>
-                    {title}
-                  </AppText>
-                ) : null}
-              </View>
-            </GestureDetector>
-
-            {children}
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </GestureHandlerRootView>
+      {sheetBody}
     </Modal>
   );
 }

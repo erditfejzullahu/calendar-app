@@ -1,34 +1,49 @@
+# Dependencies
 node_modules/
-.expo/
+
+# Metro / bundler
+.metro-health-check*
+.metro/
+
+# Build outputs
 dist/
 build/
-.DS_Store
+coverage/
+*.tsbuildinfo
 
-# Android NDK / CMake / Ninja (regenerated every native build; do not commit)
-**/.cxx/
+# OS
+.DS_Store
+Thumbs.db
+
+# Android — generated / machine-local (do not commit)
 **/.gradle/
+**/.cxx/
+**/.kotlin/
 **/CMakeFiles/
 **/.cmake/
 **/.ninja_deps
 **/.ninja_log
 **/build.ninja
 **/rules.ninja
+android/.gradle/
+android/build/
+android/app/build/
+*.apk
+*.aab
+*.jks
 
-# Native
-# ios/Pods/
-# ios/build/
-# android/.gradle/
-# android/build/
-# android/app/build/
-# android/local.properties
-# *.keystore
-# !debug.keystore
+# iOS — generated / machine-local (do not commit)
+ios/Pods/
+ios/build/
+**/*.xcuserstate
+**/xcuserdata/
+*.ipa
+*.dSYM.zip
+*.dSYM
 
-# Env
-.env
-.env.local
-# google-services.json
-# GoogleService-Info.plist
+# Expo (unused in this repo, kept for safety)
+.expo/
+
 
 # Logs
 *.log

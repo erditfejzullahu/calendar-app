@@ -12,7 +12,7 @@ import type {Meeting} from '@app-types/meeting';
 import {useMeetingsActions, useUserRole} from '@store/meetings/meetings.selectors';
 import {useAuthStore} from '@store/auth/auth.store';
 import {useMeetingsStore} from '@store/meetings/meetings.store';
-import {CreateMeetingModal} from './CreateMeetingModal';
+import {CreateMeetingFormBody} from './CreateMeetingModal';
 
 type Props = {
   meeting: Meeting | null;
@@ -39,7 +39,7 @@ export const MeetingDetailsModal = memo(({meeting, onClose}: Props) => {
     prefetchUserProfilesForMeetings([meeting]);
   }, [meeting, prefetchUserProfilesForMeetings]);
 
-  const detailSheetOpen = Boolean(meeting) && !editing;
+  const sheetOpen = Boolean(meeting);
 
   const isOwner = Boolean(meeting && selfUid && meeting.ownerId === selfUid);
   const canMutate = isOwner || userRole === 'admin';
@@ -76,13 +76,22 @@ export const MeetingDetailsModal = memo(({meeting, onClose}: Props) => {
   };
 
   return (
-    <>
-      <BottomSheetModal
-        visible={detailSheetOpen}
-        onClose={onClose}
-        title={meeting?.title}>
-        {meeting ? (
-          <>
+    <BottomSheetModal
+      visible={sheetOpen}
+      onClose={onClose}
+      title={editing ? 'Edit meeting' : meeting?.title}>
+      {meeting && editing ? (
+        <CreateMeetingFormBody
+          key={`${meeting.ownerId}:${meeting.id}`}
+          dateISO={meeting.dateISO}
+          editing={meeting}
+          onClose={() => {
+            setEditing(false);
+            onClose();
+          }}
+        />
+      ) : meeting ? (
+        <>
             <View style={styles.row}>
               <View style={styles.pill}>
                 <AppText variant="caption" color={colors.primary}>
@@ -197,19 +206,8 @@ export const MeetingDetailsModal = memo(({meeting, onClose}: Props) => {
               </AppText>
             )}
           </>
-        ) : null}
-      </BottomSheetModal>
-
-      <CreateMeetingModal
-        visible={editing && !!meeting}
-        dateISO={meeting?.dateISO ?? null}
-        editing={meeting ?? undefined}
-        onClose={() => {
-          setEditing(false);
-          onClose();
-        }}
-      />
-    </>
+      ) : null}
+    </BottomSheetModal>
   );
 });
 
