@@ -5,20 +5,20 @@ build/
 .DS_Store
 
 # Native
-ios/Pods/
-ios/build/
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
-*.keystore
-!debug.keystore
+# ios/Pods/
+# ios/build/
+# android/.gradle/
+# android/build/
+# android/app/build/
+# android/local.properties
+# *.keystore
+# !debug.keystore
 
 # Env
 .env
 .env.local
-google-services.json
-GoogleService-Info.plist
+# google-services.json
+# GoogleService-Info.plist
 
 # Logs
 *.log
