@@ -18,7 +18,7 @@ export type AuthActions = {
    * Re-read Firebase Auth session into Zustand. Needed after profile/reload —
    * `onAuthStateChanged` often does not fire when only profile fields update.
    */
-  syncSessionFromFirebase: () => void;
+  syncSessionFromFirebase: () => Promise<void>;
 };
 
 export const initialAuthSlice: AuthSlice = {

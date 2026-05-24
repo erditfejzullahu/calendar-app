@@ -168,7 +168,7 @@ export const EditProfileModal = memo(function EditProfileModal({visible, user, o
           currentPassword: values.currentPassword || undefined,
           newPassword: values.newPassword?.trim() || undefined,
         });
-        syncSessionFromFirebase();
+        await syncSessionFromFirebase();
 
         const nextEmail = values.email.trim();
         if (emailVerificationSent) {

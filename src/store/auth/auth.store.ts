@@ -8,8 +8,24 @@ type AuthStore = AuthSlice & {actions: AuthActions};
 const friendlyAuthError = (e: unknown): string => {
   const msg = (e as {code?: string; message?: string})?.code ?? (e as Error)?.message ?? '';
   if (msg.includes('email-already-in-use')) return 'That email is already registered.';
-  if (msg.includes('invalid-email')) return 'That email address looks invalid.';
-  if (msg.includes('weak-password')) return 'Password is too weak (min 8 chars).';
+  if (msg.includes('invalid-email') || msg.includes('missing-email'))
+    return 'That email address looks invalid.';
+  if (msg.includes('weak-password'))
+    return 'Password is too weak. Use at least 8 characters with upper and lowercase letters, a number, and a symbol.';
+  if (msg.includes('user-disabled'))
+    return 'This account has been disabled. Contact support if you need help.';
+  if (msg.includes('too-many-requests'))
+    return 'Too many attempts. Wait a minute and try again.';
+  if (msg.includes('operation-not-allowed'))
+    return 'Email/password sign-in is not enabled for this app.';
+  if (msg.includes('credential-already-in-use'))
+    return 'That sign-in method is already linked to another account.';
+  if (msg.includes('account-exists-with-different-credential'))
+    return 'An account already exists with this email using a different sign-in method.';
+  if (msg.includes('requires-recent-login'))
+    return 'For security, sign out and sign in again, then retry.';
+  if (msg.includes('user-token-expired') || msg.includes('invalid-user-token'))
+    return 'Your session expired. Please sign in again.';
   if (
     msg.includes('user-not-found') ||
     msg.includes('wrong-password') ||
@@ -71,18 +87,20 @@ export const useAuthStore = create<AuthStore>()(set => ({
 
     clearError: () => set({error: null}),
 
-    syncSessionFromFirebase: () => {
+    syncSessionFromFirebase: async () => {
       const mapped = authService.current();
       if (!mapped) {
         set({user: null, status: 'unauthenticated', error: null});
         return;
       }
       set({user: mapped, status: 'authenticated', error: null});
-      meetingsService
-        .ensureUserDoc(mapped.uid, mapped.email, mapped.displayName)
-        .catch(() => {
-          /* non-fatal */
-        });
+      try {
+        await meetingsService.ensureUserDoc(mapped.uid, mapped.email, mapped.displayName);
+      } catch (e) {
+        console.error('Error ensuring user doc', e);
+      } finally {
+        set({busy: false});
+      }
     },
   },
 }));
@@ -92,18 +110,20 @@ export const useAuthStore = create<AuthStore>()(set => ({
  * function. Must be called exactly once during app bootstrap.
  */
 export const initAuthListener = (): (() => void) => {
-  return authService.subscribe(user => {
+  return authService.subscribe(async user => {
     useAuthStore.setState({
       status: user ? 'authenticated' : 'unauthenticated',
       user,
       error: null,
     });
     if (user) {
-      meetingsService
-        .ensureUserDoc(user.uid, user.email, user.displayName)
-        .catch(() => {
-          /* non-fatal — stats fall back to zero on the client */
-        });
+      try {
+        await meetingsService.ensureUserDoc(user.uid, user.email, user.displayName);
+      } catch (e) {
+        console.error('Error ensuring user doc', e);
+      } finally {
+        useAuthStore.setState({busy: false});
+      }
     }
   });
 };

@@ -8,9 +8,9 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   setDoc,
   where,
-  writeBatch,
 } from '@react-native-firebase/firestore';
 import {getFirestore} from './config';
 import type {Meeting, MeetingDraft} from '@app-types/meeting';
@@ -92,6 +92,21 @@ export const sanitizeParticipantIdsForPersist = (organizerUid: string, raw: stri
   return [...new Set(raw.filter(id => typeof id === 'string' && id.trim() !== '').map(id => id.trim()))].filter(
     id => id !== organizerUid,
   );
+};
+
+/** Transaction `get()` target: ensures doc exists at `users/{uid}/meetings/{id}` and `ownerId` matches when stored. */
+const assertTransactionalMeetingWriteSnap = (
+  organizerUid: string,
+  snap: {exists: () => boolean; data: () => Record<string, unknown> | undefined},
+): void => {
+  if (!snap.exists()) {
+    throw new Error('Meeting not found.');
+  }
+  const data = snap.data();
+  const storedOwner = typeof data?.ownerId === 'string' ? data.ownerId : '';
+  if (storedOwner && storedOwner !== organizerUid) {
+    throw new Error('Meeting not found.');
+  }
 };
 
 const mergeDedupMeetingsAscending = (rows: Meeting[]): Meeting[] => {
@@ -466,51 +481,59 @@ export const meetingsService = {
       updatedAt: now,
     };
 
-    const batch = writeBatch(db());
-    batch.set(ref, meeting);
-    batch.set(
-      userDocRef(uid),
-      {stats: {meetingsCreated: increment(1)}},
-      {merge: true},
-    );
-    await batch.commit();
+    await runTransaction(db(), async tx => {
+      tx.set(ref, meeting);
+      tx.set(
+        userDocRef(uid),
+        {stats: {meetingsCreated: increment(1)}},
+        {merge: true},
+      );
+    });
     return meeting;
   },
 
   async update(uid: string, id: string, draft: MeetingDraft): Promise<void> {
     const {startsAt, endsAt} = buildTimestamps(draft.dateISO, draft.startTime, draft.endTime);
-
-    const ref = doc(meetingsCol(uid), id);
-    const batch = writeBatch(db());
     const participantIds = sanitizeParticipantIdsForPersist(uid, draft.participantIds);
-    batch.update(ref, {
-      title: draft.title.trim(),
-      description: draft.description?.trim() || null,
-      dateISO: draft.dateISO,
-      startTime: draft.startTime,
-      endTime: draft.endTime,
-      participantIds,
-      startsAt,
-      endsAt,
-      updatedAt: Date.now(),
+    const ref = doc(meetingsCol(uid), id);
+    const updatedAt = Date.now();
+
+    await runTransaction(db(), async tx => {
+      const snap = await tx.get(ref);
+      assertTransactionalMeetingWriteSnap(uid, snap);
+
+      tx.update(ref, {
+        title: draft.title.trim(),
+        description: draft.description?.trim() || null,
+        dateISO: draft.dateISO,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
+        participantIds,
+        startsAt,
+        endsAt,
+        updatedAt,
+      });
+      tx.set(
+        userDocRef(uid),
+        {stats: {meetingsEdited: increment(1)}},
+        {merge: true},
+      );
     });
-    batch.set(
-      userDocRef(uid),
-      {stats: {meetingsEdited: increment(1)}},
-      {merge: true},
-    );
-    await batch.commit();
   },
 
   async remove(uid: string, id: string): Promise<void> {
     const ref = doc(meetingsCol(uid), id);
-    const batch = writeBatch(db());
-    batch.delete(ref);
-    batch.set(
-      userDocRef(uid),
-      {stats: {meetingsDeleted: increment(1)}},
-      {merge: true},
-    );
-    await batch.commit();
+
+    await runTransaction(db(), async tx => {
+      const snap = await tx.get(ref);
+      assertTransactionalMeetingWriteSnap(uid, snap);
+
+      tx.delete(ref);
+      tx.set(
+        userDocRef(uid),
+        {stats: {meetingsDeleted: increment(1)}},
+        {merge: true},
+      );
+    });
   },
 };

@@ -38,6 +38,27 @@ export const writeBatch = jest.fn(() => ({
   commit: jest.fn(async () => undefined),
 }));
 
+export const runTransaction = jest.fn(
+  async (_firestore: unknown, updateFn: (tx: TransactionMock) => Promise<unknown>) => {
+    const tx: TransactionMock = {
+      set: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      get: jest.fn(async () => ({
+        exists: (): boolean => true,
+        data: (): Record<string, unknown> => ({}),
+      })),
+    };
+    return updateFn(tx);
+  },
+);
+
+type TransactionMock = {
+  set: jest.Mock;
+  update: jest.Mock;
+  delete: jest.Mock;
+  get: jest.Mock;
+};
 
 
 /** Invokes observers microtask-async to mimic snapshot delivery without blocking constructors. */
