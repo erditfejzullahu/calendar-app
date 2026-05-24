@@ -67,6 +67,7 @@ describe('meetings.store actions', () => {
 
   describe('updateMeeting', () => {
     it('refetches authoritative server projection after mutate', async () => {
+      const refreshSpy = jest.spyOn(useMeetingsStore.getState().actions, 'refresh');
       const target = buildMeeting({
         ownerId: 'self',
         id: 'm1',
@@ -83,6 +84,9 @@ describe('meetings.store actions', () => {
       expect(mockedMeetings.update).toHaveBeenCalled();
       expect(mockedMeetings.fetchMeetingFromServer).toHaveBeenCalledWith('self', 'm1');
       expect(useMeetingsStore.getState().byId['self:m1']).toEqual(fresh);
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
+
+      refreshSpy.mockRestore();
     });
 
     it('allows admins to mutate another organizer meeting', async () => {

@@ -136,6 +136,8 @@ export const useMeetingsStore = create<MeetingsStore>()((set, get) => ({
       await meetingsService.update(target.ownerId, target.id, draft);
       const fresh = await meetingsService.fetchMeetingFromServer(target.ownerId, target.id);
       if (fresh) get().internal._mergeMeetingIntoIndex(fresh);
+      /** Full listener rewind so indexes + participant merges match server (timezone rows, invitations, stale group cache). */
+      get().actions.refresh();
     },
     deleteMeeting: async target => {
       const viewer = requireUid();
