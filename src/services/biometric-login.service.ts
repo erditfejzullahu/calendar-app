@@ -20,6 +20,9 @@ import {Alert, Platform} from 'react-native';
 
 const KEYCHAIN_SERVICE = 'CalendarApp.quickLogin.credentials';
 
+/** Must match reads to writes so Android resolves the correct BiometricPrompt / Keystore rules. */
+const QUICK_LOGIN_ACCESS_CONTROL = ACCESS_CONTROL.BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE;
+
 async function biometricKindLabel(): Promise<string> {
   const t = await getSupportedBiometryType();
   switch (t) {
@@ -66,7 +69,7 @@ export async function saveCredentialsForBiometricUnlock(email: string, password:
   try {
     const res = await setGenericPassword(email.trim(), password, {
       service: KEYCHAIN_SERVICE,
-      accessControl: ACCESS_CONTROL.BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE,
+      accessControl: QUICK_LOGIN_ACCESS_CONTROL,
       accessible: ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
       authenticationPrompt: {
         title: 'Protect this account',
@@ -83,7 +86,7 @@ export async function saveCredentialsForBiometricUnlock(email: string, password:
   }
 }
 
-/** Remove quick-login credential (call on sign-out so the device no longer trusts this session). */
+/** Remove quick-login credential (e.g. after password change, or wipe from settings). Signing out intentionally does NOT call this — the blob stays encrypted under biometrics/PIN until the password changes elsewhere. */
 export async function clearBiometricStoredCredentials(): Promise<void> {
   try {
     await resetGenericPassword({service: KEYCHAIN_SERVICE});
@@ -99,9 +102,11 @@ export async function loadCredentialsViaBiometrics(): Promise<{
   try {
     const cred = await getGenericPassword({
       service: KEYCHAIN_SERVICE,
+      accessControl: QUICK_LOGIN_ACCESS_CONTROL,
       authenticationPrompt: {
         title: 'Sign in to CalendarApp',
-        subtitle: 'Authenticate to continue',
+        subtitle: Platform.OS === 'android' ? 'Use biometrics or your screen lock.' : undefined,
+        description: Platform.OS === 'android' ? 'Unlock to paste saved email and password for sign-in.' : undefined,
         cancel: 'Cancel',
       },
     });

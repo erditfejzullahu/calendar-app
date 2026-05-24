@@ -49,13 +49,12 @@ describe('auth.store actions', () => {
     expect(mockedEnsureUserDoc).toHaveBeenCalledWith(user.uid, user.email, user.displayName);
   });
 
-  it('clears local session markers on sign-out', async () => {
+  it('signs out and clears session without removing device biometric quick-login', async () => {
     mockedAuthService.signOut.mockResolvedValue(undefined);
-    jest.mocked(clearBiometricStoredCredentials).mockResolvedValue(undefined);
 
     await useAuthStore.getState().actions.signOut();
 
-    expect(clearBiometricStoredCredentials).toHaveBeenCalled();
+    expect(clearBiometricStoredCredentials).not.toHaveBeenCalled();
     expect(useAuthStore.getState().status).toBe('unauthenticated');
     expect(useAuthStore.getState().user).toBeNull();
     expect(useAuthStore.getState().error).toBeNull();

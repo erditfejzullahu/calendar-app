@@ -1,5 +1,5 @@
 import {Controller} from 'react-hook-form';
-import {memo, useCallback, useMemo, useState} from 'react';
+import {memo, useCallback, useState} from 'react';
 import {View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
@@ -66,29 +66,25 @@ export const SignInScreen = memo(({navigation}: Props) => {
     actions.clearError();
     const cred = await loadCredentialsViaBiometrics();
     if (!cred) return;
-    await actions.signIn(cred.username, cred.password).catch(() => {});
+    const email = cred.username.trim();
+    const password = cred.password;
+    if (!email || !password) return;
+    await actions.signIn(email, password).catch(() => {});
   }, [actions]);
-
-  const quickLoginButton = useMemo(() => {
-    console.log('showQuickLogin', showQuickLogin);
-    if (!showQuickLogin) return null;
-    return (
-      <Button
-        label={`Continue with ${quickLoginLabel}`}
-        variant="secondary"
-        onPress={onQuickLogin}
-        loading={busy}
-        fullWidth
-        size="lg"
-        style={{marginBottom: spacing.lg}}
-      />
-    );
-  }, [showQuickLogin, quickLoginLabel, onQuickLogin, busy]);
-
 
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to manage your meetings.">
-      {quickLoginButton}
+      {showQuickLogin ? (
+        <Button
+          label={`Continue with ${quickLoginLabel}`}
+          variant="secondary"
+          onPress={onQuickLogin}
+          loading={busy}
+          fullWidth
+          size="lg"
+          style={{marginBottom: spacing.lg}}
+        />
+      ) : null}
 
       <Controller
         control={control}

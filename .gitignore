@@ -4,9 +4,16 @@ dist/
 build/
 .DS_Store
 
-.ninja_log
-.cxx/
-*_log
+# Android NDK / CMake / Ninja (regenerated every native build; do not commit)
+**/.cxx/
+**/.gradle/
+**/CMakeFiles/
+**/.cmake/
+**/.ninja_deps
+**/.ninja_log
+**/build.ninja
+**/rules.ninja
+
 # Native
 # ios/Pods/
 # ios/build/

@@ -76,7 +76,7 @@ Confirm **Authentication → Sign-in methods → Email/Password** is enabled and
 
 ### Biometric quick sign-in (Face ID / Touch ID / fingerprint)
 
-After a successful email/password sign-in, the app can offer to save credentials in **`react-native-keychain`**, guarded by **`BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE`** (biometrics or device PIN). Signing out clears that local entry. **`NSFaceIDUsageDescription`** is set in **`ios/CalendarApp/Info.plist`**; rebuild iOS (**`pod install`**) after adding **`react-native-keychain`**.
+After a successful email/password sign-in, the app can offer to save credentials in **`react-native-keychain`**, guarded by **`BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE`** (biometrics or device PIN). **Signing out clears the Firebase session only** — the encrypted quick-login blob stays until the password changes in profile (**`applyProfileUpdates`**) or the user wipes app data / uninstalls. **`NSFaceIDUsageDescription`** is set in **`ios/CalendarApp/Info.plist`**; rebuild iOS (**`pod install`**) after adding **`react-native-keychain`**.
 
 Firestore stores meetings **under each signed-in user**:
 

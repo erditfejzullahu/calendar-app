@@ -1,5 +1,4 @@
 import {create} from 'zustand';
-import {clearBiometricStoredCredentials} from '@services/biometric-login.service';
 import {authService} from '@services/firebase/auth.service';
 import {meetingsService} from '@services/firebase/meetings.service';
 import {AuthActions, AuthSlice, initialAuthSlice} from './auth.types';
@@ -63,7 +62,6 @@ export const useAuthStore = create<AuthStore>()(set => ({
       set({busy: true});
       try {
         await authService.signOut();
-        await clearBiometricStoredCredentials();
         set({status: 'unauthenticated', user: null, busy: false, error: null});
       } catch (e) {
         set({busy: false, error: friendlyAuthError(e)});
