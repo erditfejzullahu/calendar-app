@@ -1,0 +1,1 @@
+/home/erditi/Desktop/Projects/calendar-app/android/app/build/intermediates/cxx/Debug/236cf3i2/obj/arm64-v8a

@@ -1,0 +1,88 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    //
+    // This app stores meetings UNDER each user doc:
+    //   users/{userId}/meetings/{meetingId}
+    // (see src/services/firebase/meetings.service.ts)
+    //
+    // Rules scoped only to "/meetings/{meetingId}" at the DATABASE ROOT
+    // do NOT apply to subcollections and will produce permission-denied.
+    //
+
+    function userRole(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+
+    /** Role is mirrored on Firestore users/{uid}.role (NOT Auth custom claims here). */
+    function isSignedInAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userRole(request.auth.uid) == 'admin';
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == userId || isSignedInAdmin());
+
+      /** Profile bootstrap + normal merges — only yourself. */
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      /**
+       * Stats/counters merged from meeting batches (`stats.meetings*`) live on this doc.
+       * Organizers update their own profile; admins need update when fixing another user's
+       * meetings (same batch touches `meetings/` + stats here), which `allow write: self only`
+       * incorrectly blocked (`permission-denied` on the whole batch).
+       */
+      allow update: if request.auth != null
+        && (request.auth.uid == userId || isSignedInAdmin());
+
+      /** Optional: callers may delete own user root doc; admins do not wipe profiles via app. */
+      allow delete: if request.auth != null && request.auth.uid == userId;
+
+      match /meetings/{meetingId} {
+
+        allow read: if request.auth != null
+          && (request.auth.uid == userId || isSignedInAdmin());
+
+        // Create meeting doc (batch also updates parent user stats — handled above)
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.ownerId == request.auth.uid
+          && request.resource.data.id == meetingId
+          && request.resource.data.startsAt != null
+          && request.resource.data.endsAt != null
+          && request.resource.data.endsAt > request.resource.data.startsAt;
+
+        allow update: if request.auth != null
+          && (
+            (
+              request.auth.uid == userId
+              && resource.data.ownerId == request.auth.uid
+              && request.resource.data.ownerId == request.auth.uid
+              && request.resource.data.endsAt > request.resource.data.startsAt
+            )
+            || (
+              isSignedInAdmin()
+              && resource.data.ownerId == userId
+              && request.resource.data.ownerId == resource.data.ownerId
+              && request.resource.data.endsAt > request.resource.data.startsAt
+            )
+          );
+
+        allow delete: if request.auth != null
+          && (
+            (request.auth.uid == userId && resource.data.ownerId == request.auth.uid)
+            || (isSignedInAdmin() && resource.data.ownerId == userId)
+          );
+      }
+    }
+
+    //
+    // If you later ADD a TOP-LEVEL /meetings/{meetingId} collection (sharing,
+    // org-wide calendar, etc.), define that match HERE with its own rules.
+    //
+  }
+}

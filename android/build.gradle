@@ -1,0 +1,47 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+        // react-native-gesture-handler resolves RN via `node` during Gradle configuration.
+        // Android Studio / daemons often have no Node on PATH (NVM/FNM/etc.). Providing the path
+        // skips that exec entirely — avoids "starting process 'command 'node'''".
+        REACT_NATIVE_NODE_MODULES_DIR = file("${rootDir}/../node_modules/react-native").absolutePath
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        // Parses android/app/google-services.json into Android resources for Firebase (required by @react-native-firebase).
+        classpath("com.google.gms:google-services:4.4.4")
+    }
+}
+
+def androidLocalProps = new Properties()
+def androidLocalPropsFile = rootProject.file("local.properties")
+if (androidLocalPropsFile.exists()) {
+    androidLocalPropsFile.withInputStream { androidLocalProps.load(it) }
+}
+def nodeExeFromShellEnv = System.getenv("NODE_BINARY") ?: System.getenv("NODE_EXE")
+def resolvedNodeExecutable =
+    androidLocalProps.getProperty("nodejs.executable")?.trim()
+        ?: nodeExeFromShellEnv?.trim()
+        ?: "node"
+def resolvedReactNativeNodeModulesDir = file("${rootDir}/../node_modules/react-native").absolutePath
+
+// Before the React plugin configures library subprojects, expose RN dir + Node for Exec providers.
+ext.REACT_NATIVE_NODE_MODULES_DIR = resolvedReactNativeNodeModulesDir
+ext.NODE_EXECUTABLE = resolvedNodeExecutable
+
+apply plugin: "com.facebook.react.rootproject"
+
+// Mirrors the block above — reliably on Project.ext after the root plugin runs.
+ext.REACT_NATIVE_NODE_MODULES_DIR = resolvedReactNativeNodeModulesDir
+ext.NODE_EXECUTABLE = resolvedNodeExecutable
