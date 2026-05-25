@@ -1,8 +1,16 @@
 import {buildMeeting} from '@testing/factories/meeting.factory';
 import {buildAuthUser} from '@testing/factories/user.factory';
-import {renderHook} from '@testing-library/react-native';
+import {act, renderHook, waitFor} from '@testing-library/react-native';
 import {useAuthStore} from '@store/auth/auth.store';
-import {useAllUpcomingMeetings, useMeetingCountsByDate, useUpcomingMeetings} from './meetings.selectors';
+import {
+  useMeetingStats,
+  useMeetingsForDay,
+  useMeetingsInitialHydrated,
+  useUpcomingMeetings,
+  useUpcomingCount,
+  useMeetingCountsByDate,
+  useAllUpcomingMeetings,
+} from './meetings.selectors';
 import {bindMeetingsToUser, useMeetingsStore} from './meetings.store';
 
 jest.mock('@services/firebase/meetings.service', () => ({
@@ -151,5 +159,78 @@ describe('meetings selectors', () => {
     const {result} = renderHook(() => useUpcomingMeetings(5));
 
     expect(result.current.map(m => m.id)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4']);
+  });
+
+  it('lists meetings for one calendar day respecting byDate indexing', () => {
+    useMeetingsStore.getState().internal._hydrateMeetings([
+      buildMeeting({ownerId: 'self', dateISO: '2026-07-02', startsAt: 10, endsAt: 11, id: 'a'}),
+      buildMeeting({ownerId: 'self', dateISO: '2026-07-03', startsAt: 30, endsAt: 31, id: 'b'}),
+    ]);
+
+    const {result} = renderHook(() => useMeetingsForDay('2026-07-02'));
+    expect(result.current.map(m => m.id)).toEqual(['a']);
+  });
+
+  it('exposes hydrate readiness explicitly for splash / skeleton logic', async () => {
+    bindMeetingsToUser(null);
+
+    const {result} = renderHook(() => useMeetingsInitialHydrated());
+    expect(result.current).toBe(false);
+
+    act(() => useMeetingsStore.getState().internal._hydrateMeetings([]));
+
+    await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it('aggregates persisted stats alongside upcoming tally', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_820_000_000_000);
+    await act(async () => {
+      useMeetingsStore.getState().internal._hydrateUserExtras({
+        stats: {
+          meetingsCreated: 11,
+          meetingsEdited: 3,
+          meetingsDeleted: 1,
+        },
+        userRole: null,
+      });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      useMeetingsStore.getState().internal._hydrateMeetings([
+        buildMeeting({
+          ownerId: 'self',
+          id: 'soon',
+          startsAt: 1_820_000_000_100,
+        }),
+      ]);
+    });
+    useAuthStore.setState({user: buildAuthUser({uid: 'self'}), status: 'authenticated', busy: false, error: null});
+
+    const {result} = renderHook(() => useMeetingStats());
+
+    expect(result.current).toEqual({
+      created: 11,
+      edited: 3,
+      deleted: 1,
+      upcoming: 1,
+    });
+  });
+
+  it('counts all upcoming attendee-visible meetings independently of explicit limits', () => {
+    jest.spyOn(Date, 'now').mockReturnValue(9_999);
+    useMeetingsStore.getState().internal._hydrateMeetings([
+      buildMeeting({ownerId: 'host', participantIds: ['self'], startsAt: 10_050, id: 'inv'}),
+      buildMeeting({ownerId: 'self', startsAt: 10_075, id: 'own'}),
+      buildMeeting({ownerId: 'solo', participantIds: [], startsAt: 11_100, id: 'hide'}),
+    ]);
+    useAuthStore.setState({
+      status: 'authenticated',
+      user: buildAuthUser({uid: 'self'}),
+      busy: false,
+      error: null,
+    });
+
+    const {result} = renderHook(() => useUpcomingCount());
+    expect(result.current).toBe(2);
   });
 });

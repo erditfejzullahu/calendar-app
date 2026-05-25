@@ -12,7 +12,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports */
 jest.mock('react-native-reanimated', () => {
   const useSharedValue = (init: number) => ({ value: init });
-  const withTiming = (toValue: unknown) => toValue;
+  const withTiming = jest.fn((toValue: unknown) => toValue);
   const Easing = {
     quad: jest.fn(fn => fn),
     out: jest.fn(pattern => pattern),

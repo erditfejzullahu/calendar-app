@@ -2,6 +2,7 @@ import {buildMeetingDraft} from '@testing/factories/meeting-draft.factory';
 import {buildMeeting} from '@testing/factories/meeting.factory';
 import {buildAuthUser} from '@testing/factories/user.factory';
 import {meetingsService} from '@services/firebase/meetings.service';
+import {act} from '@testing-library/react-native';
 import {useAuthStore} from '@store/auth/auth.store';
 import {bindMeetingsToUser, useMeetingsStore} from './meetings.store';
 
@@ -28,6 +29,7 @@ const mockedMeetings = jest.mocked(meetingsService);
 describe('meetings.store actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedMeetings.subscribeUserDocument.mockReset();
     bindMeetingsToUser(null);
     mockedMeetings.subscribeOwnMeetingsMergedWithParticipantInvites.mockReturnValue(() => {});
     mockedMeetings.subscribeMeetingsAcrossAllUsers.mockReturnValue(() => {});
@@ -148,6 +150,69 @@ describe('meetings.store actions', () => {
       useMeetingsStore.getState().internal._hydrateMeetings([newer]);
 
       expect(useMeetingsStore.getState().byId['self:alpha']?.title).toBe('Winner');
+    });
+  });
+
+  describe('prefetch + suppression', () => {
+    it('hydrates attendee labels after prefetch settles', async () => {
+      mockedMeetings.fetchMeetingUserDisplayBundle.mockResolvedValueOnce({
+        ownerHints: {alice: 'Alice'},
+        userPeekByUid: {alice: {displayName: 'Alice', email: 'a@test.com'}},
+      });
+
+      await act(async () => {
+        useMeetingsStore.getState().actions.prefetchUserProfilesForMeetings([buildMeeting({ownerId: 'alice'})]);
+        await Promise.resolve();
+      });
+
+      expect(useMeetingsStore.getState().ownerHints.alice).toBe('Alice');
+      expect(useMeetingsStore.getState().userPeekByUid.alice?.email).toBe('a@test.com');
+    });
+
+    it('ignores revived snapshots matching a suppressed delete fingerprint', async () => {
+      const target = buildMeeting({ownerId: 'self', id: 'ghost'});
+      mockedMeetings.remove.mockResolvedValue(undefined);
+      useMeetingsStore.getState().internal._hydrateMeetings([target]);
+
+      await useMeetingsStore.getState().actions.deleteMeeting({id: target.id, ownerId: target.ownerId});
+      expect(useMeetingsStore.getState().byId['self:ghost']).toBeUndefined();
+
+      useMeetingsStore.getState().internal._hydrateMeetings([target]);
+      expect(useMeetingsStore.getState().byId['self:ghost']).toBeUndefined();
+    });
+  });
+
+  describe('admin global routing', () => {
+    it('fans out admins to cross-user subscriptions when globally enabled', async () => {
+      jest.mocked(mockedMeetings.subscribeUserDocument).mockImplementation((_uid, onExtras) => {
+        onExtras({
+          stats: {meetingsCreated: 0, meetingsEdited: 0, meetingsDeleted: 0},
+          userRole: 'admin',
+        });
+        return jest.fn();
+      });
+      mockedMeetings.subscribeMeetingsAcrossAllUsers.mockReturnValue(() => {});
+      mockedMeetings.subscribeOwnMeetingsMergedWithParticipantInvites.mockReturnValue(() => {});
+
+      useAuthStore.setState({
+        status: 'authenticated',
+        user: buildAuthUser({uid: 'admin'}),
+        busy: false,
+        error: null,
+      });
+
+      bindMeetingsToUser('admin');
+      mockedMeetings.subscribeMeetingsAcrossAllUsers.mockClear();
+      mockedMeetings.subscribeOwnMeetingsMergedWithParticipantInvites.mockClear();
+
+      await act(async () => {
+        useMeetingsStore.getState().actions.setAdminCalendarShowAll(true);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockedMeetings.subscribeMeetingsAcrossAllUsers).toHaveBeenCalled();
+      expect(mockedMeetings.subscribeOwnMeetingsMergedWithParticipantInvites).not.toHaveBeenCalled();
     });
   });
 });
